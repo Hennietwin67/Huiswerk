@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="af">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1b5e20">
+<link rel="manifest" href="manifest.json">
+<title>Huiswerk Hulp</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f4f7f5;color:#152019}
+header{background:#1b5e20;color:white;padding:22px 18px;border-radius:0 0 24px 24px}
+h1{margin:0;font-size:27px}.sub{opacity:.85;margin-top:4px}
+main{max-width:760px;margin:auto;padding:16px}.card{background:white;border-radius:18px;padding:17px;margin:12px 0;box-shadow:0 2px 12px #00000012}
+.row{display:flex;gap:9px;flex-wrap:wrap}.btn{border:0;border-radius:12px;padding:12px 15px;font-weight:700;cursor:pointer;background:#e8f1e9;color:#174d1b}.primary{background:#1b5e20;color:white}.danger{background:#ffebee;color:#b71c1c}
+input,select{width:100%;padding:13px;border:1px solid #ccd6ce;border-radius:11px;font-size:16px;margin:6px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.day{min-height:72px;background:#f7faf7;border:1px solid #e1e9e2;border-radius:9px;padding:7px;font-size:12px;cursor:pointer}.today{outline:2px solid #1b5e20}.has{background:#eaf5eb}.num{font-weight:800}
+.task{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e1e7e2;padding:12px;border-radius:13px;margin:8px 0}.done{text-decoration:line-through;opacity:.5}.small{font-size:13px;color:#5b665e}
+.modal{position:fixed;inset:0;background:#0008;display:none;align-items:end;justify-content:center}.modalbox{background:white;width:100%;max-width:760px;padding:20px;border-radius:22px 22px 0 0}
+.week{font-weight:800;margin-top:10px}.empty{color:#6b756e;padding:8px 0}
+</style>
+</head>
+<body>
+<header><h1>📚 Huiswerk Hulp</h1><div class="sub">Jou Afrikaanse skoolbeplanner</div></header>
+<main>
+<section class="card">
+<h2>Vandag</h2><div id="todayTasks"></div>
+</section>
+
+<section class="card">
+<h2>➕ Voeg huiswerk by</h2>
+<label>Wat moet jy doen?</label>
+<input id="title" placeholder="bv. Wiskunde oefening 4">
+<label>Datum</label>
+<input id="date" type="date">
+<label>Herinnering</label>
+<select id="reminder"><option value="none">Geen</option><option value="morning">08:00 op die dag</option><option value="evening">18:00 die vorige dag</option></select>
+<div class="row">
+<button class="btn primary" onclick="addTask()">Voeg by</button>
+<button class="btn" onclick="voiceInput()">🎤 Praat</button>
+</div>
+<div id="voiceStatus" class="small"></div>
+</section>
+
+<section class="card">
+<h2>📅 Kalender</h2>
+<div class="row">
+<button class="btn" onclick="changeMonth(-1)">←</button>
+<strong id="monthTitle" style="padding:12px 0;flex:1;text-align:center"></strong>
+<button class="btn" onclick="changeMonth(1)">→</button>
+</div>
+<div class="grid" style="margin-top:10px"><b>Ma</b><b>Di</b><b>Wo</b><b>Do</b><b>Vr</b><b>Sa</b><b>So</b></div>
+<div class="grid" id="calendar"></div>
+</section>
+
+<section class="card">
+<h2>📋 Alle huiswerk</h2><div id="allTasks"></div>
+</section>
+</main>
+
+<div class="modal" id="dayModal" onclick="if(event.target===this)closeModal()">
+<div class="modalbox"><h2 id="modalTitle"></h2><div id="modalTasks"></div><button class="btn" onclick="closeModal()">Maak toe</button></div>
+</div>
+
+<script>
+let tasks=JSON.parse(localStorage.getItem("huiswerk")||"[]");
+let view=new Date(); view.setDate(1);
+const pad=n=>String(n).padStart(2,"0");
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const fmt=s=>new Date(s+"T00:00").toLocaleDateString("af-ZA",{day:"numeric",month:"long",year:"numeric"});
+const today=iso(new Date());
+document.getElementById("date").value=today;
+
+function save(){localStorage.setItem("huiswerk",JSON.stringify(tasks)); render();}
+function addTask(){
+ let title=document.getElementById("title").value.trim(), date=document.getElementById("date").value;
+ if(!title||!date){alert("Vul asseblief die huiswerk en datum in.");return}
+ tasks.push({id:Date.now(),title,date,reminder:document.getElementById("reminder").value,done:false,notified:false});
+ document.getElementById("title").value=""; save();
+}
+function toggle(id){let t=tasks.find(x=>x.id===id);t.done=!t.done;save()}
+function removeTask(id){tasks=tasks.filter(x=>x.id!==id);save()}
+function taskHTML(t){return `<div class="task"><div><div class="${t.done?'done':''}"><b>${escapeHtml(t.title)}</b></div><div class="small">${fmt(t.date)}</div></div><div class="row"><button class="btn" onclick="toggle(${t.id})">${t.done?'↩️':'✅'}</button><button class="btn danger" onclick="removeTask(${t.id})">🗑️</button></div></div>`}
+function render(){
+ let tt=tasks.filter(t=>t.date===today).sort((a,b)=>a.done-b.done);
+ document.getElementById("todayTasks").innerHTML=tt.length?tt.map(taskHTML).join(""):'<div class="empty">Geen huiswerk vir vandag nie 🎉</div>';
+ let all=[...tasks].sort((a,b)=>a.date.localeCompare(b.date));
+ document.getElementById("allTasks").innerHTML=all.length?all.map(taskHTML).join(""):'<div class="empty">Jy het nog niks bygevoeg nie.</div>';
+ renderCal();
+}
+function renderCal(){
+ let y=view.getFullYear(),m=view.getMonth();
+ document.getElementById("monthTitle").textContent=new Date(y,m,1).toLocaleDateString("af-ZA",{month:"long",year:"numeric"});
+ let first=new Date(y,m,1), days=new Date(y,m+1,0).getDate(), start=(first.getDay()+6)%7;
+ let html="";
+ for(let i=0;i<start;i++)html+="<div></div>";
+ for(let d=1;d<=days;d++){
+  let s=`${y}-${pad(m+1)}-${pad(d)}`, has=tasks.some(t=>t.date===s);
+  html+=`<button class="day ${s===today?'today':''} ${has?'has':''}" onclick="openDay('${s}')"><div class="num">${d}</div>${has?'📚':''}</button>`;
+ }
+ document.getElementById("calendar").innerHTML=html;
+}
+function changeMonth(n){view.setMonth(view.getMonth()+n);renderCal()}
+function openDay(s){
+ document.getElementById("modalTitle").textContent=fmt(s);
+ let x=tasks.filter(t=>t.date===s);
+ document.getElementById("modalTasks").innerHTML=x.length?x.map(taskHTML).join(""):'<div class="empty">Geen huiswerk op hierdie datum.</div>';
+ document.getElementById("dayModal").style.display="flex";
+}
+function closeModal(){document.getElementById("dayModal").style.display="none"}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function voiceInput(){
+ const S=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!S){document.getElementById("voiceStatus").textContent="Stem-invoer word nie deur hierdie blaaier ondersteun nie.";return}
+ let r=new S();r.lang="af-ZA";r.interimResults=false;r.maxAlternatives=1;
+ document.getElementById("voiceStatus").textContent="🎤 Luister...";
+ r.onresult=e=>{document.getElementById("title").value=e.results[0][0].transcript;document.getElementById("voiceStatus").textContent="Gereed!";};
+ r.onerror=()=>document.getElementById("voiceStatus").textContent="Ek kon nie die stem verstaan nie. Probeer weer.";
+ r.start();
+}
+function checkReminders(){
+ if(!("Notification" in window))return;
+ if(Notification.permission==="default")Notification.requestPermission();
+ let now=new Date();
+ tasks.forEach(t=>{
+  if(t.notified||t.done)return;
+  let target=new Date(t.date+"T08:00");
+  if(t.reminder==="evening"){target=new Date(t.date+"T08:00");target.setDate(target.getDate()-1);target.setHours(18,0,0,0)}
+  if(t.reminder!=="none" && now>=target && now-target<24*60*60*1000){
+   if(Notification.permission==="granted")new Notification("Huiswerk Hulp",{body:"Onthou: "+t.title});
+   t.notified=true;
+  }
+ });
+ localStorage.setItem("huiswerk",JSON.stringify(tasks));
+}
+render(); checkReminders();
+setInterval(checkReminders,60000);
+</script>
+</body>
+</html>
